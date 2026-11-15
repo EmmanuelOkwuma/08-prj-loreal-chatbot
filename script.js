@@ -7,6 +7,11 @@ const chatWindow = document.getElementById("chatWindow");
 const sendBtn = document.getElementById("sendBtn");
 const resetBtn = document.getElementById("resetBtn");
 const status = document.getElementById("status");
+const micBtn = document.getElementById("micBtn");
+const voiceStatus = document.getElementById("voiceStatus");
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let listening = false;
 let history = [];
 let busy = false;
 
@@ -23,6 +28,8 @@ function addMessage(role, content) {
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 function resetChat() {
+  cancelDictation();
+  userInput.value = "";
   history = [];
   chatWindow.replaceChildren();
   addMessage("assistant", "Welcome! Let’s find your next beauty favorite. Ask me about L’Oréal products, or tell me about the routine you’d like to build.");
@@ -31,6 +38,7 @@ function resetChat() {
 resetBtn.addEventListener("click", resetChat);
 document.querySelectorAll(".suggestions button").forEach((button) => {
   button.addEventListener("click", () => {
+    cancelDictation();
     userInput.value = button.textContent;
     userInput.focus();
   });
@@ -40,13 +48,14 @@ document.querySelectorAll(".suggestions button").forEach((button) => {
 chatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const content = userInput.value.trim();
-  if (!content || busy) return;
+  if (!content || busy || listening) return;
   if (!WORKER_URL) {
     status.textContent = "Setup needed: add your public Worker URL to script.js.";
     return;
   }
   busy = true;
   sendBtn.disabled = resetBtn.disabled = true;
+  micBtn.disabled = true;
   addMessage("user", content);
   userInput.value = "";
   status.textContent = "Your beauty advisor is thinking…";
@@ -71,7 +80,99 @@ chatForm.addEventListener("submit", async (event) => {
   } finally {
     busy = false;
     sendBtn.disabled = resetBtn.disabled = false;
+    micBtn.disabled = !SpeechRecognition;
     userInput.focus();
   }
 });
+// Voice input fills the draft only. It never submits a message.
+function finishDictation() {
+  listening = false;
+  micBtn.setAttribute("aria-pressed", "false");
+  micBtn.setAttribute("aria-label", "Speak your question");
+  micBtn.title = "Speak your question";
+  userInput.readOnly = false;
+  sendBtn.disabled = busy;
+}
+function cancelDictation() {
+  // Ignore any late events from a cancelled recording.
+  const previous = recognition;
+  recognition = null;
+  if (previous) previous.abort();
+  finishDictation();
+  voiceStatus.textContent = SpeechRecognition
+    ? "Speak your question, then review it before sending."
+    : "Voice input isn’t available in this browser. You can still type your question.";
+}
+if (!SpeechRecognition) micBtn.disabled = true;
+micBtn.addEventListener("click", () => {
+  if (busy || !SpeechRecognition) return;
+  if (listening) {
+    voiceStatus.textContent = "Finishing transcription…";
+    recognition.stop();
+    return;
+  }
+  // A fresh instance prevents old recordings from changing a new draft.
+  const session = new SpeechRecognition();
+  recognition = session;
+  const draft = userInput.value.trim();
+  let receivedText = false;
+  let failed = false;
+  session.lang = document.documentElement.lang || "en-US";
+  session.continuous = false;
+  session.interimResults = false;
+  listening = true;
+  sendBtn.disabled = true;
+  userInput.readOnly = true;
+  micBtn.setAttribute("aria-pressed", "true");
+  micBtn.setAttribute("aria-label", "Stop listening");
+  micBtn.title = "Stop listening";
+  voiceStatus.textContent = "Connecting to microphone…";
+  session.onstart = () => {
+    if (recognition === session) voiceStatus.textContent = "Listening… Speak now. Click the microphone again to stop.";
+  };
+  session.onresult = (event) => {
+    if (recognition !== session) return;
+    const parts = [];
+    for (const result of event.results) {
+      if (result.isFinal) parts.push(result[0].transcript);
+    }
+    const transcript = parts.join(" ").trim();
+    if (!transcript) return;
+    receivedText = true;
+    const combined = [draft, transcript].filter(Boolean).join(" ");
+    userInput.value = combined.slice(0, userInput.maxLength);
+    voiceStatus.textContent = combined.length > userInput.maxLength
+      ? "The question reached its length limit. Review and edit it before sending."
+      : "Transcribed. Review or edit your question, then click Send.";
+  };
+  session.onerror = (event) => {
+    if (recognition !== session) return;
+    failed = true;
+    const errors = {
+      "not-allowed": "Microphone permission was denied. Allow microphone access in your browser settings, or type your question.",
+      "service-not-allowed": "Voice input is blocked by this browser. You can still type your question.",
+      "audio-capture": "No microphone was found. Check your microphone or type your question.",
+      "no-speech": "No speech was detected. Try the microphone again or type your question.",
+      "network": "Voice input couldn’t connect. Try again or type your question."
+    };
+    voiceStatus.textContent = errors[event.error] || "Voice input stopped. Try again or type your question.";
+    recognition = null;
+    finishDictation();
+    session.abort();
+  };
+  session.onend = () => {
+    if (recognition !== session) return;
+    recognition = null;
+    finishDictation();
+    if (!receivedText && !failed) voiceStatus.textContent = "No speech was captured. Try again or type your question.";
+    userInput.focus();
+  };
+  try { session.start(); }
+  catch {
+    recognition = null;
+    finishDictation();
+    voiceStatus.textContent = "Voice input couldn’t start. Try again or type your question.";
+  }
+});
+window.addEventListener("pagehide", cancelDictation);
 resetChat();

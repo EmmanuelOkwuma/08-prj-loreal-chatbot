@@ -40,3 +40,9 @@ Create your own GitHub repository and push this project there; the classroom sta
 Change `ALLOWED_ORIGIN` in Cloudflare to your Pages origin, e.g. `https://your-name.github.io` (no repository path or trailing slash). Redeploy the Worker and verify the public site, follow-up questions, off-topic redirection, phone layout and failure message.
 
 Origin checking restricts browser access but is not authentication: external clients can forge an Origin header. Before leaving a paid endpoint publicly available, configure Cloudflare rate limiting and an OpenAI project budget alert; use stronger access controls if needed.
+
+## Voice input
+
+Click the microphone beside Send and allow microphone access. Speak a question, then pause or click the microphone again to stop. The transcription appears in the input field; review and edit it before clicking Send. Dictation appends to an existing draft and never submits automatically. New chat cancels dictation and clears the draft.
+
+This uses the browser's SpeechRecognition or webkitSpeechRecognition service, not a separate OpenAI audio endpoint. Support varies by browser, and the browser may use an online speech service. If unavailable or permission is denied, typing still works. Test on the HTTPS Pages site with a real microphone: allow permission, dictate, edit, send, deny permission, and cancel with New chat.

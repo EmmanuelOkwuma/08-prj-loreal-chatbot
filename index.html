@@ -26,8 +26,12 @@
         <form id="chatForm" class="chat-form">
           <label for="userInput" class="visually-hidden">Your beauty question</label>
           <input id="userInput" name="userInput" placeholder="Ask about L’Oréal products or routines…" maxlength="2000" autocomplete="off" required>
+          <button type="button" id="micBtn" aria-label="Speak your question" aria-pressed="false" title="Speak your question">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1M12 19v3M8 22h8"/></svg>
+          </button>
           <button type="submit" id="sendBtn" aria-label="Send message">Send ↗</button>
         </form>
+        <p id="voiceStatus" class="voice-status" role="status">Speak your question, then review it before sending.</p>
         <p id="status" class="status" role="status"></p>
       </section>
     </main>
