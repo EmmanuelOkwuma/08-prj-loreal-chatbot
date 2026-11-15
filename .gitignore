@@ -1,2 +1,6 @@
-# Secrets file containing API keys
-secrets.js
+.DS_Store
+.env*
+.dev.vars*
+*secret*
+node_modules/
+.wrangler/
