@@ -10,6 +10,11 @@ const status = document.getElementById("status");
 const micBtn = document.getElementById("micBtn");
 const voiceStatus = document.getElementById("voiceStatus");
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const voiceTools = document.getElementById("voiceTools");
+const voiceAlternatives = document.getElementById("voiceAlternatives");
+const brandSelect = document.getElementById("brandSelect");
+const BEAUTY_BRANDS = ["L’Oréal", "L’Oréal Paris", "CeraVe", "La Roche-Posay", "Lancôme", "Maybelline", "Garnier", "Kérastase", "Redken", "NYX Professional Makeup", "Kiehl’s", "SkinCeuticals", "Vichy", "Urban Decay", "Yves Saint Laurent", "Prada Beauty", "Armani Beauty"];
+let useBrandHints = true;
 let recognition = null;
 let listening = false;
 let history = [];
@@ -53,6 +58,7 @@ chatForm.addEventListener("submit", async (event) => {
     status.textContent = "Setup needed: add your public Worker URL to script.js.";
     return;
   }
+  voiceTools.hidden = true;
   busy = true;
   sendBtn.disabled = resetBtn.disabled = true;
   micBtn.disabled = true;
@@ -94,6 +100,8 @@ function finishDictation() {
   sendBtn.disabled = busy;
 }
 function cancelDictation() {
+  voiceTools.hidden = true;
+  voiceAlternatives.replaceChildren();
   // Ignore any late events from a cancelled recording.
   const previous = recognition;
   recognition = null;
@@ -117,7 +125,16 @@ micBtn.addEventListener("click", () => {
   const draft = userInput.value.trim();
   let receivedText = false;
   let failed = false;
-  session.lang = document.documentElement.lang || "en-US";
+  voiceTools.hidden = true;
+  voiceAlternatives.replaceChildren();
+  session.lang = "en-US";
+  session.maxAlternatives = 5;
+  // Newer recognition engines can favor brand names; older ones skip this.
+  if (useBrandHints && "phrases" in session && window.SpeechRecognitionPhrase) {
+    try {
+      session.phrases = BEAUTY_BRANDS.map((brand) => new window.SpeechRecognitionPhrase(brand, 5));
+    } catch { useBrandHints = false; }
+  }
   session.continuous = false;
   session.interimResults = false;
   listening = true;
@@ -141,6 +158,31 @@ micBtn.addEventListener("click", () => {
     receivedText = true;
     const combined = [draft, transcript].filter(Boolean).join(" ");
     userInput.value = combined.slice(0, userInput.maxLength);
+    voiceTools.hidden = false;
+    voiceAlternatives.replaceChildren();
+    // Offer complete alternative drafts without silently changing the user's words.
+    const finalResults = Array.from(event.results).filter((result) => result.isFinal);
+    const drafts = new Set([userInput.value]);
+    for (let index = 0; index < finalResults.length; index++) {
+      const result = finalResults[index];
+      for (let alternative = 1; alternative < result.length && drafts.size < 5; alternative++) {
+        const words = finalResults.map((item, i) => item[i === index ? alternative : 0].transcript).join(" ").trim();
+        const option = [draft, words].filter(Boolean).join(" ").slice(0, userInput.maxLength);
+        if (drafts.has(option)) continue;
+        drafts.add(option);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = `Use: ${option}`;
+        button.addEventListener("click", () => {
+          if (listening || busy) return;
+          userInput.value = option;
+          voiceAlternatives.replaceChildren();
+          userInput.focus();
+          voiceStatus.textContent = "Alternative selected. Review your question, then click Send.";
+        });
+        voiceAlternatives.append(button);
+      }
+    }
     voiceStatus.textContent = combined.length > userInput.maxLength
       ? "The question reached its length limit. Review and edit it before sending."
       : "Transcribed. Review or edit your question, then click Send.";
@@ -148,11 +190,13 @@ micBtn.addEventListener("click", () => {
   session.onerror = (event) => {
     if (recognition !== session) return;
     failed = true;
+    if (event.error === "phrases-not-supported") useBrandHints = false;
     const errors = {
       "not-allowed": "Microphone permission was denied. Allow microphone access in your browser settings, or type your question.",
       "service-not-allowed": "Voice input is blocked by this browser. You can still type your question.",
       "audio-capture": "No microphone was found. Check your microphone or type your question.",
       "no-speech": "No speech was detected. Try the microphone again or type your question.",
+      "phrases-not-supported": "This browser couldn’t use brand hints. Click the microphone again to dictate without them.",
       "network": "Voice input couldn’t connect. Try again or type your question."
     };
     voiceStatus.textContent = errors[event.error] || "Voice input stopped. Try again or type your question.";
@@ -174,5 +218,27 @@ micBtn.addEventListener("click", () => {
     voiceStatus.textContent = "Voice input couldn’t start. Try again or type your question.";
   }
 });
+// Explicit brand correction works even when the browser has no hint support.
+for (const brand of BEAUTY_BRANDS) {
+  const option = document.createElement("option");
+  option.value = option.textContent = brand;
+  brandSelect.append(option);
+}
+brandSelect.addEventListener("change", () => {
+  const brand = brandSelect.value;
+  brandSelect.value = "";
+  if (!brand || listening || busy) return;
+  const start = userInput.selectionStart;
+  const end = userInput.selectionEnd;
+  if (userInput.value.length - (end - start) + brand.length > userInput.maxLength) {
+    voiceStatus.textContent = "Make a little room in your question before inserting a brand.";
+    return;
+  }
+  userInput.setRangeText(brand, start, end, "end");
+  voiceAlternatives.replaceChildren();
+  userInput.focus();
+  voiceStatus.textContent = "Brand inserted. Review your question, then click Send.";
+});
+userInput.addEventListener("input", () => voiceAlternatives.replaceChildren());
 window.addEventListener("pagehide", cancelDictation);
 resetChat();

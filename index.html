@@ -32,6 +32,11 @@
           <button type="submit" id="sendBtn" aria-label="Send message">Send ↗</button>
         </form>
         <p id="voiceStatus" class="voice-status" role="status">Speak your question, then review it before sending.</p>
+        <div id="voiceTools" class="voice-tools" hidden>
+          <div id="voiceAlternatives" class="voice-alternatives" aria-label="Alternative transcriptions"></div>
+          <label for="brandSelect">Misheard a brand? Select the word above, then choose its name.</label>
+          <select id="brandSelect"><option value="">Choose a beauty brand…</option></select>
+        </div>
         <p id="status" class="status" role="status"></p>
       </section>
     </main>
